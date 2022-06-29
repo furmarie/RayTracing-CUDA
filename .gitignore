@@ -2,13 +2,14 @@
 .vs/
 bin/
 bin-int/
-x64/
+Raytracing/x64/
 
 # Files
 *.vcxproj
 *.vcxproj.user
 *.vcxproj.filters
 *.sln
+RayTracing/imgui.ini
 
 # Exclude
 !vendor/bin
