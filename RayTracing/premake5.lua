@@ -1,3 +1,7 @@
+require("premake5-cuda")
+
+architecture "x64"
+
 project "RayTracing"
    kind "ConsoleApp"
    language "C++"
@@ -5,7 +9,7 @@ project "RayTracing"
    targetdir "bin/%{cfg.buildcfg}"
    staticruntime "off"
 
-   files { "src/**.h", "src/**.cpp" }
+   files { "src/**.h", "src/**.hpp", "src/**.cpp", "src/**.cuh", "src/**.cu" }
 
    includedirs
    {
@@ -22,6 +26,18 @@ project "RayTracing"
    {
        "Walnut"
    }
+
+
+   -- Add build customisation for CUDA
+   buildcustomizations "BuildCustomizations/CUDA 11.7"
+
+   -- CUDA properties
+   cudaMaxRegCount "32"
+   cudaCodeGeneration { "compute_75,sm_75" } -- Specifies names of NVIDIA GPUs to generate code for, change as required
+
+
+   -- Additional arguments to pass to NVCC. std c++17 is required for Walnut.
+   cudaCompilerOptions { "--std c++17" }  
 
    targetdir ("../bin/" .. outputdir .. "/%{prj.name}")
    objdir ("../bin-int/" .. outputdir .. "/%{prj.name}")
