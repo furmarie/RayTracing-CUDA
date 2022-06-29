@@ -1,2 +1,2 @@
-RayTracing/src/RayTracing/math/ext/* linguist-vendored
-*.lua linguist-detectable=false
+RayTracing/src/RayTracing/math/ext/* linguist-detectable=false
+**.lua linguist-detectable=false
