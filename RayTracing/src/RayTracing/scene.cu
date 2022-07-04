@@ -313,9 +313,7 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 		);
 		sphere1->setTransformMatrix(sphereTform2);
 
-		if(sphereCol.x > -0.5f) {
-			sphere1->m_baseColour = sphereCol;
-		}
+
 
 		objectBase* sphere2 = new sphere();
 		sphere2->m_baseColour = vec3({ 0.0, 0.7, 0.9 });
@@ -337,6 +335,16 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 		//world[0]->m_baseColour = vec3({ 0.0, 0.0, 1.0 });
 		d_lights[0] = new pointLight();
 		d_lights[0]->m_location = vec3({ 0.0, 0.0, +10.0 });
+	}
+}
+
+__global__
+void update_world(objectList** objList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
+	// TODO create better interface to change object properties
+	if(sphereCol.x > -0.5f) {
+		if((*objList)->list[0]) {
+			(*objList)->list[0]->m_baseColour = sphereCol;
+		}
 	}
 }
 
@@ -492,7 +500,7 @@ namespace fRT {
 
 		// Update the world if it has changed
 		if(m_worldChanged) {
-			create_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
+			update_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
 			checkCudaErrors1(cudaGetLastError());
 			checkCudaErrors1(cudaDeviceSynchronize());
 			m_worldChanged = false;
@@ -616,11 +624,14 @@ namespace fRT {
 		return true;
 	}
 
-	bool Scene::handleColours(float* sphereCol) {
-		
-		sphereColour.x = sphereCol[0];
-		sphereColour.y = sphereCol[1];
-		sphereColour.z = sphereCol[2];
+	bool Scene::handleColours(vec3& sphereCol) {
+		//sphereColour.x = sphereCol[0];
+		//sphereColour.y = sphereCol[1];
+		//sphereColour.z = sphereCol[2];
+		if(sphereColour.x == sphereCol.x && sphereColour.y == sphereCol.y && sphereColour.z == sphereCol.z) {
+			return false;
+		}
+		sphereColour = sphereCol;
 		m_worldChanged = true;
 		return true;
 	}

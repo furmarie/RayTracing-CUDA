@@ -23,7 +23,8 @@ public:
 		if(ImGui::Button("Render")) {
 			Render();
 		}
-		ImGui::ColorPicker3("Sphere Colour", sphereColour);
+		ImGui::ColorPicker3("Sphere Colour", &sphereColour.x);
+
 		ImGui::End();
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -128,7 +129,7 @@ private:
 	float m_LastRenderTime = 0.0f;
 
 	// Temporarily here
-	float sphereColour[3];
+	vec3 sphereColour;
 	bool m_disableMouse = false;
 };
 

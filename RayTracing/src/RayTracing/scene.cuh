@@ -64,7 +64,7 @@ namespace fRT {
 		bool mouseMoved(vec2 currPos);
 
 		// Handle colour changes
-		bool handleColours(float* sphereCol);
+		bool handleColours(vec3& sphereCol);
 
 		void OnResize(uint32_t width, uint32_t height);
 
@@ -73,7 +73,7 @@ namespace fRT {
 		// Private functions
 	private:
 
-		// Private members:
+		// Private members
 	private:
 		// Camera for this scene
 		camera m_camera;
