@@ -4,7 +4,6 @@
 #include "cuda_includes.h"
 #include "ray.hpp"
 
-
 class camera {
 public:
 	// Default constructor

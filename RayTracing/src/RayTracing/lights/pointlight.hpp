@@ -60,7 +60,6 @@ public:
 
 		// Compute illumination 
 		float theta = acosf(dot(record.localNormal, lightDir));
-		//printf("n: %.2f\n", startPoint.z);
 		if(theta > PI_2) {
 			colour = m_baseColour;
 			intensity = 0.0f;
