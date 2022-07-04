@@ -20,7 +20,6 @@
 
 
 
-
 namespace fRT {
 	class Scene {
 	public:
@@ -61,6 +60,12 @@ namespace fRT {
 		bool keyPressedSpace();
 		bool keyPressedLCtrl();
 
+		// Handle mouse movement
+		bool mouseMoved(vec2 currPos);
+
+		// Handle colour changes
+		bool handleColours(float* sphereCol);
+
 		void OnResize(uint32_t width, uint32_t height);
 
 		std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
@@ -73,6 +78,9 @@ namespace fRT {
 		// Camera for this scene
 		camera m_camera;
 
+		// Previous mouse position
+		vec2 prevMousePos;
+
 		// Image Buffers for device and host
 		vec3* m_deviceImageBuffer;
 		vec3* m_hostImageBuffer;
@@ -84,6 +92,9 @@ namespace fRT {
 		vec3 m_cameraPosition;
 		float m_cameraStep = 0.05f;
 		float m_cameraAngleStep = 0.02f;
+
+		// Testing colour change for just one sphere
+		vec3 sphereColour;
 
 		// List for objects and lights. Pointers on device
 		objectList** d_objList;

@@ -284,7 +284,7 @@ void render(vec3* buff, const int xSize, const int ySize, camera** cam, lightBas
 }
 
 __global__
-void create_world(objectList** objList, lightBase** d_lights, objectBase** d_world) {
+void create_world(objectList** objList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
 	if(threadIdx.x == 0 && blockIdx.x == 0) {
 		objectBase* sphere1 = new sphere();
 		GTForm* sphereTform = new GTForm();
@@ -312,6 +312,10 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 			vec3({ 0.5, 0.5, 0.5 })
 		);
 		sphere1->setTransformMatrix(sphereTform2);
+
+		if(sphereCol.x > -0.5f) {
+			sphere1->m_baseColour = sphereCol;
+		}
 
 		objectBase* sphere2 = new sphere();
 		sphere2->m_baseColour = vec3({ 0.0, 0.7, 0.9 });
@@ -379,8 +383,7 @@ namespace fRT {
 		m_worldChanged = true;
 		m_cameraPosition = vec3({ 0, -15, 1 });
 		m_hostImageBuffer = nullptr;
-
-
+		sphereColour.x = -1;
 	}
 
 	Scene::~Scene() {
@@ -414,9 +417,10 @@ namespace fRT {
 
 		// Create the world on initialisation as the objects do not change
 		// Might move later to change when updated
-		create_world << <1, 1 >> > (d_objList, d_lights, d_world);
+		create_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
+		m_worldChanged = false;
 
 		// Create the camera here, update in Render if required
 		create_camera << <1, 1 >> > (d_camera, m_cameraPosition, 1, 1);
@@ -485,6 +489,14 @@ namespace fRT {
 		dForward = 0.0f;
 		dTheta = 0.0f;
 		dPhi = 0.0f;
+
+		// Update the world if it has changed
+		if(m_worldChanged) {
+			create_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
+			checkCudaErrors1(cudaGetLastError());
+			checkCudaErrors1(cudaDeviceSynchronize());
+			m_worldChanged = false;
+		}
 
 		// Call create world kernel to make objects on the device
 		int worldSize = 3;
@@ -594,5 +606,23 @@ namespace fRT {
 		return true;
 	}
 
+	bool Scene::mouseMoved(vec2 currPos) {
+		dTheta += (currPos.x - prevMousePos.x) / 500.0f;
+		dPhi += -(currPos.y - prevMousePos.y) / 500.0f;
+		//dTheta += (currPos.x) / 500.0f;
+		//dPhi += -(currPos.y) / 500.0f;
+		//std::cerr << currPos.x << ' ' << currPos.y << std::endl;
+		prevMousePos = currPos;
+		return true;
+	}
+
+	bool Scene::handleColours(float* sphereCol) {
+		
+		sphereColour.x = sphereCol[0];
+		sphereColour.y = sphereCol[1];
+		sphereColour.z = sphereCol[2];
+		m_worldChanged = true;
+		return true;
+	}
 };
 
