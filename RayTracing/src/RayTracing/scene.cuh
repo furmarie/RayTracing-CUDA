@@ -61,7 +61,7 @@ namespace fRT {
 		bool keyPressedLCtrl();
 
 		// Handle mouse movement
-		bool mouseMoved(vec2 currPos);
+		bool mouseMoved(vec2 currPos, bool moveCamera);
 
 		// Handle colour changes
 		bool handleColours(vec3& sphereCol);
@@ -112,6 +112,8 @@ namespace fRT {
 
 		float dTheta = 0.0f;
 		float dPhi = 0.0f;
+
+		float m_allowedMouseMove = 2000.0f;
 
 		std::shared_ptr<Walnut::Image> m_FinalImage;
 		uint32_t* m_ImageData = nullptr;

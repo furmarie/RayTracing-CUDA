@@ -44,15 +44,19 @@ public:
 		ImGui::End();
 		ImGui::PopStyleVar();
 
+		mousePos = ImGui::GetMousePos();
+
 		if(ImGui::IsKeyPressed(ImGuiKey_M)) {
 			m_disableMouse = !m_disableMouse;
 			app->disableMouse(m_disableMouse);
 		}
 
-		mousePos = ImGui::GetMousePos();
 
 		handleColours();
-		//handleMouse();
+
+		handleMouse();
+
+		// TODO handle keys when window focused
 		handleKeys();
 
 		Render();
@@ -106,16 +110,9 @@ public:
 	}
 
 	bool handleMouse() {
-		auto& io = ImGui::GetIO();
-		//std::cerr << io.MousePos.x << ' ' << io.MousePos.y << std::endl;
-
-		bool pp = m_scene.mouseMoved({ mousePos.x, mousePos.y });
-		//ImGui::SetCursorPosX(0);
-		//ImGui::SetCursorPosY(0);
-		return pp;
-		return false;
+		return m_scene.mouseMoved({ mousePos.x, mousePos.y }, m_disableMouse);
 	}
-	
+
 	bool handleColours() {
 		return m_scene.handleColours(sphereColour);
 	}
@@ -130,6 +127,8 @@ private:
 
 	// Temporarily here
 	vec3 sphereColour;
+
+	// if mouse camera movement enabled, disableMouse is true then
 	bool m_disableMouse = false;
 };
 

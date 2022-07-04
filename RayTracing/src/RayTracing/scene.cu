@@ -614,7 +614,11 @@ namespace fRT {
 		return true;
 	}
 
-	bool Scene::mouseMoved(vec2 currPos) {
+	bool Scene::mouseMoved(vec2 currPos, bool moveCamera) {
+		if(!moveCamera) {
+			prevMousePos = currPos;
+			return false;
+		}
 		dTheta += (currPos.x - prevMousePos.x) / 500.0f;
 		dPhi += -(currPos.y - prevMousePos.y) / 500.0f;
 		//dTheta += (currPos.x) / 500.0f;
