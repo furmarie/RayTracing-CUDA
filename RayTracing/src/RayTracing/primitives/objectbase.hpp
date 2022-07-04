@@ -5,6 +5,7 @@
 #include "../ray.hpp"
 #include "../math/gtform.hpp"
 
+#include "listcontainer.hpp"
 
 class objectBase;
 
@@ -21,7 +22,7 @@ public:
 	// Constructor and destructor
 	__device__ objectBase() {
 		m_baseColour = vec3({0.0f, 1.0f, 1.0f});
-		m_transformMatrix = nullptr;		
+		m_transformMatrix = new GTForm();
 	}
 	__device__ ~objectBase() {
 		if(m_transformMatrix) {
@@ -48,6 +49,7 @@ public:
 	GTForm* m_transformMatrix;
 };
 
+using objectList = listContainer<objectBase>;
 
 
 #endif // !OBJECTBASE_H

@@ -17,8 +17,7 @@ public:
 	__device__ virtual bool computeIllumination(
 		const hitRecord& record,
 		objectBase* currObj,
-		objectBase** objectList,
-		int listSize,
+		objectList** objList,
 		vec3& colour,
 		float& intensity
 	) const override {
@@ -35,9 +34,9 @@ public:
 		bool validInt = false;
 		float lightDist = length(m_location - startPoint);
 
-		for(int i = 0; i < listSize; i++) {
-			if(objectList[i] != currObj) {
-				validInt = objectList[i]->checkIntersection(lightRay, temp);
+		for(int i = 0; i < (*objList)->numItems; i++) {
+			if((*objList)->list[i] != currObj) {
+				validInt = (*objList)->list[i]->checkIntersection(lightRay, temp);
 				if(validInt) {
 					float dist = length(temp.intPoint - startPoint);
 					if(dist > lightDist) {

@@ -1,8 +1,7 @@
-#ifndef OBJECTLIST_H
-#define OBJECTLIST_H
+#ifndef LISTCONTAINER_H
+#define LISTCONTAINER_H
 
-#include "objectbase.hpp"
-
+// Contains list of pointers to object of type T
 template<class T>
 class listContainer {
 public:
@@ -18,12 +17,19 @@ public:
 		}
 	}
 
-	__device__ bool addItem(T** item) {
+	__device__ bool addItem(T* item) {
 		if(numItems >= maxItems) {
 			return false;
 		}
-		list[numItems++] = *item;
+		list[numItems++] = item;
 		return true;
+	}
+
+	__device__ T* operator[] (size_t idx) {
+		if(idx >= numItems) {
+			return nullptr;
+		}
+		return list[idx];
 	}
 
 public:
@@ -33,4 +39,4 @@ public:
 };
 
 
-#endif // !OBJECTLIST_H
+#endif // !LISTCONTAINER_H

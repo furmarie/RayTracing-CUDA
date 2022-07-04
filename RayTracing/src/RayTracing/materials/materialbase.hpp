@@ -4,6 +4,7 @@
 #include "../cuda_includes.h"
 #include "../primitives/objectbase.hpp"
 #include "../lights/lightbase.hpp"
+#include "listcontainer.hpp"
 
 class materialBase {
 public:
@@ -15,9 +16,9 @@ public:
 
 	// Function to return colour at a point with this material
 	virtual vec3 getColour(
-		objectBase** objectList,
+		objectList** objList,
+		lightList** lights
 
-		lightBase** lightList,
 	) {
 
 	}
@@ -26,5 +27,6 @@ public:
 public:
 	bool m_hasTexture;
 };
+
 
 #endif // !MATERIALBASE_H

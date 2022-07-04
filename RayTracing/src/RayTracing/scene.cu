@@ -206,8 +206,8 @@ __device__ bool castRay(const ray& r, hitRecord& record, objectList** objList) {
 __device__ vec3 pixel_colour(const int x, const int y,
 	const int xSize, const int ySize,
 	camera** cam,
-	lightBase** d_lights, int lightSize,
-	objectList** objList
+	objectList** objList,
+	lightList** d_lightList
 ) {
 	//return vec3({0, 1, 0});
 
@@ -236,7 +236,7 @@ __device__ vec3 pixel_colour(const int x, const int y,
 		//printf("HIT PLANE \n");
 		vec3 colour, difColour;
 		float intensity = 0.0f;
-		bool validIllum = d_lights[0]->computeIllumination(record, record.hitObj, (*objList)->list, (*objList)->numItems, colour, intensity);
+		bool validIllum = ((*d_lightList)->list[0])->computeIllumination(record, record.hitObj, objList, colour, intensity);
 		if(validIllum) {
 			//colour *= intensity;
 			//printf("%.2f\n", intensity);
@@ -269,7 +269,7 @@ __device__ vec3 pixel_colour(const int x, const int y,
 }
 
 __global__
-void render(vec3* buff, const int xSize, const int ySize, camera** cam, lightBase** d_lights, int lightSize, objectList** objList) {
+void render(vec3* buff, const int xSize, const int ySize, camera** cam, objectList** d_objList, lightList** d_lightList) {
 	//if(threadIdx.x == 0 && blockIdx.x == 0) {
 	//	printf("HERE render<> %f\n", (*objList)->list[1]->m_baseColour.x);
 
@@ -280,11 +280,11 @@ void render(vec3* buff, const int xSize, const int ySize, camera** cam, lightBas
 	if(x >= xSize || y >= ySize) {
 		return;
 	}
-	buff[y * xSize + x] = pixel_colour(x, y, xSize, ySize, cam, d_lights, lightSize, objList);
+	buff[y * xSize + x] = pixel_colour(x, y, xSize, ySize, cam, d_objList, d_lightList);
 }
 
 __global__
-void create_world(objectList** objList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
+void create_world(objectList** objList, lightList** d_lightList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
 	if(threadIdx.x == 0 && blockIdx.x == 0) {
 		objectBase* sphere1 = new sphere();
 		GTForm* sphereTform = new GTForm();
@@ -295,15 +295,15 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 		);
 
 		GTForm* planeTform = new GTForm();
-		planeTform->setTransform(
-			vec3({ 0.0, 0.0, -1.0 }),
-			vec3({ 0.0, 0.0, 0.0 }),
-			vec3({ 3.0, 3.0, 3.0 })
-		);
-
 		objectBase* plane1 = new plane();
 		plane1->m_baseColour = vec3({ 0.5, 0.5, 0.5 });
-		plane1->setTransformMatrix(planeTform);
+		plane1->setTransformMatrix(
+			new GTForm(
+				vec3({ 0.0, 0.0, -1.0 }),
+				vec3({ 0.0, 0.0, 0.0 }),
+				vec3({ 3.0, 3.0, 3.0 })
+			)
+		);
 
 		GTForm* sphereTform2 = new GTForm();
 		sphereTform2->setTransform(
@@ -313,33 +313,28 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 		);
 		sphere1->setTransformMatrix(sphereTform2);
 
-
-
 		objectBase* sphere2 = new sphere();
 		sphere2->m_baseColour = vec3({ 0.0, 0.7, 0.9 });
 		sphere2->setTransformMatrix(sphereTform);
 
 		(*objList) = new objectList(d_world, 5);
 
-		//(*objList)->list[0] = sphere1;
-		//(*objList)->list[1] = plane1;
-		//(*objList)->list[2] = sphere2;
 		objectBase* sphere3 = new sphere();
 		sphere3->setTransformMatrix(planeTform);
-		(*objList)->addItem(&sphere1);
-		(*objList)->addItem(&plane1);
-		(*objList)->addItem(&sphere2);
+		(*objList)->addItem(sphere1);
+		(*objList)->addItem(plane1);
+		(*objList)->addItem(sphere2);
 
-		//printf("HERE 2 %f\n", (*objList)->list[1]->m_baseColour.x);
+		(*d_lightList) = new lightList(d_lights, 1);
 
-		//world[0]->m_baseColour = vec3({ 0.0, 0.0, 1.0 });
-		d_lights[0] = new pointLight();
-		d_lights[0]->m_location = vec3({ 0.0, 0.0, +10.0 });
+		lightBase* light1 = new pointLight();
+		light1->m_location = vec3({ 0.0, 0.0, +10.0 });
+		(*d_lightList)->addItem(light1);
 	}
 }
 
 __global__
-void update_world(objectList** objList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
+void update_world(objectList** objList, lightList** d_lightList, objectBase** d_world, vec3 sphereCol) {
 	// TODO create better interface to change object properties
 	if(sphereCol.x > -0.5f) {
 		if((*objList)->list[0]) {
@@ -419,13 +414,14 @@ namespace fRT {
 		checkCudaErrors1(cudaMalloc((void**) &d_camera, sizeof(camera*)));
 
 		checkCudaErrors1(cudaMalloc((void**) &d_objList, sizeof(objectList*)));
+		checkCudaErrors1(cudaMalloc((void**) &d_lightList, sizeof(lightList*)));
 		checkCudaErrors1(cudaMalloc((void**) &d_world, 6 * sizeof(objectBase*)));
 		checkCudaErrors1(cudaMalloc((void**) &d_lights, 6 * sizeof(lightBase*)));
 
 
 		// Create the world on initialisation as the objects do not change
 		// Might move later to change when updated
-		create_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
+		create_world << <1, 1 >> > (d_objList, d_lightList, d_lights, d_world, sphereColour);
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
 		m_worldChanged = false;
@@ -500,7 +496,7 @@ namespace fRT {
 
 		// Update the world if it has changed
 		if(m_worldChanged) {
-			update_world << <1, 1 >> > (d_objList, d_lights, d_world, sphereColour);
+			update_world << <1, 1 >> > (d_objList, d_lightList, d_world, sphereColour);
 			checkCudaErrors1(cudaGetLastError());
 			checkCudaErrors1(cudaDeviceSynchronize());
 			m_worldChanged = false;
@@ -513,7 +509,7 @@ namespace fRT {
 		// Render the buffer
 		dim3 blocks(xSize / tx + 1, ySize / ty + 1);
 		dim3 threads(tx, ty);
-		render << <blocks, threads >> > (m_deviceImageBuffer, xSize, ySize, d_camera, d_lights, lightSize, d_objList);
+		render << <blocks, threads >> > (m_deviceImageBuffer, xSize, ySize, d_camera, d_objList, d_lightList);
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
 
@@ -532,9 +528,21 @@ namespace fRT {
 				float green = m_hostImageBuffer[pixelIdx].y;
 				float blue = m_hostImageBuffer[pixelIdx].z;
 
-				unsigned char ir = static_cast<unsigned char>((red) * 255.0);
-				unsigned char ig = static_cast<unsigned char>((green) * 255.0);
-				unsigned char ib = static_cast<unsigned char>((blue) * 255.0);
+
+				if(red < 0.0f) red = 0.0f;
+				if(red > 1.0f) red = 1.0f;
+				if(green < 0.0f) green = 0.0f;
+				if(green > 1.0f) green = 1.0f;
+				if(blue < 0.0f) blue = 0.0f;
+				if(blue > 1.0f) blue = 1.0f;
+
+				//red = clamp(red, 0.0, 0.99);
+				//green = clamp(green, 0.0, 0.99);
+				//blue = clamp(blue, 0.0, 0.99);
+
+				uint8_t ir = static_cast<uint8_t>((red) * 255.0f);
+				uint8_t ig = static_cast<uint8_t>((green) * 255.0f);
+				uint8_t ib = static_cast<uint8_t>((blue) * 255.0f);
 
 				m_ImageData[pixelIdx] = (255 << 24) | (ib << 16) | (ig << 8) | (ir);
 			}

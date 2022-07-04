@@ -9,18 +9,17 @@
 #include "camera.hpp"
 #include "primitives/sphere.hpp"
 #include "primitives/plane.hpp"
-#include "primitives/objectlist.hpp"
+
+
 //#include "primitives/cylinder.hpp"
 //#include "primitives/cone.hpp"
 //#include "primitives/torus.hpp"
 #include "lights/pointlight.hpp"
-//#include "hitrecord.h"
 
-#include "thrust/host_vector.h"
-#include "thrust/device_vector.h"
+#include "listcontainer.hpp"
+
+
 #include "cuda_includes.h"
-
-using objectList = listContainer<objectBase>;
 
 namespace fRT {
 	class Scene {
@@ -100,6 +99,7 @@ namespace fRT {
 
 		// List for objects and lights. Pointers on device
 		objectList** d_objList;
+		lightList** d_lightList;
 		objectBase** d_world;
 		lightBase** d_lights;
 
@@ -116,8 +116,6 @@ namespace fRT {
 
 		float dTheta = 0.0f;
 		float dPhi = 0.0f;
-
-		float m_allowedMouseMove = 2000.0f;
 
 		std::shared_ptr<Walnut::Image> m_FinalImage;
 		uint32_t* m_ImageData = nullptr;
