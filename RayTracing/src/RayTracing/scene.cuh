@@ -16,9 +16,11 @@
 #include "lights/pointlight.hpp"
 //#include "hitrecord.h"
 
+#include "thrust/host_vector.h"
+#include "thrust/device_vector.h"
 #include "cuda_includes.h"
 
-
+using objectList = listContainer<objectBase>;
 
 namespace fRT {
 	class Scene {
@@ -100,6 +102,8 @@ namespace fRT {
 		objectList** d_objList;
 		objectBase** d_world;
 		lightBase** d_lights;
+
+		// Vectors for objects and lights and device
 
 		// Camera object for this scene
 		camera** d_camera;
