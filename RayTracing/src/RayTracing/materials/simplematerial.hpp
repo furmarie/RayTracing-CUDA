@@ -37,7 +37,6 @@ public:
 
 		// Compute the specular component
 		if(m_shininess > 0.0) {
-			printf("Spec\n");
 			spcColour = computeSpecular(
 				objList,
 				lights,
