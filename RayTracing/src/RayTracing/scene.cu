@@ -4,7 +4,7 @@
 //#include "ctpl.h"
 #include "scene.cuh"
 #include "ray.hpp"
-//#include "materials/simplematerial.hpp"
+#include "materials/simplematerial.hpp"
 //#include "textures/checker.hpp"
 #include <cassert>
 #include <iostream>
@@ -206,7 +206,7 @@ __device__ bool castRay(const ray& r, hitRecord& record, objectList** objList) {
 __device__ vec3 pixel_colour(const int x, const int y,
 	const int xSize, const int ySize,
 	camera** cam,
-	objectList** objList,
+	objectList** d_objList,
 	lightList** d_lightList
 ) {
 	//return vec3({0, 1, 0});
@@ -229,23 +229,46 @@ __device__ vec3 pixel_colour(const int x, const int y,
 
 	// END DEBUGGING
 
-	bool validInt = castRay(cameraRay, record, objList);
+	bool validInt = castRay(cameraRay, record, d_objList);
 
 	if(validInt) {
 		//return record.localColour;
 		//printf("HIT PLANE \n");
 		vec3 colour, difColour;
 		float intensity = 0.0f;
-		bool validIllum = ((*d_lightList)->list[0])->computeIllumination(record, record.hitObj, objList, colour, intensity);
-		if(validIllum) {
-			//colour *= intensity;
-			//printf("%.2f\n", intensity);
-			difColour = colour * intensity * record.localColour;
+		//bool validIllum = ((*d_lightList)->list[0])->computeIllumination(record, record.hitObj, objList, colour, intensity);
+		//if(validIllum) {
+		//	//colour *= intensity;
+		//	//printf("%.2f\n", intensity);
+		//	difColour = colour * intensity * record.localColour;
+		//}
+		//else {
+		//	// Debugging shadows
+		//	//return vec3({0, 1, 0});
+		//}
+
+
+		if(record.hitObj->m_hasMaterial) {
+			float reflectivity = 0.0f;
+			vec3 res = record.hitObj->m_pMaterial->getColour(
+				d_objList,
+				d_lightList,
+				record,
+				cameraRay,
+				reflectivity
+			);
+			return res;
 		}
 		else {
-			// Debugging shadows
-			//return vec3({0, 1, 0});
+			// Use basic method to compute colour because no material
+			difColour = materialBase::computeDiffuseColour(
+				d_objList,
+				d_lightList,
+				record,
+				record.hitObj->m_baseColour
+			);
 		}
+
 		return difColour;
 	}
 	else {
@@ -321,15 +344,26 @@ void create_world(objectList** objList, lightList** d_lightList, lightBase** d_l
 
 		objectBase* sphere3 = new sphere();
 		sphere3->setTransformMatrix(planeTform);
+		(*objList)->addItem(sphere2);
 		(*objList)->addItem(sphere1);
 		(*objList)->addItem(plane1);
-		(*objList)->addItem(sphere2);
 
-		(*d_lightList) = new lightList(d_lights, 1);
+		// Create a sample material
+		simpleMaterial* sampleMat = new simpleMaterial();
+		sampleMat->m_baseColour = { 1.0, 0.0, 0.0 };
+		sampleMat->m_reflectivity = 0.0f;
+		sampleMat->m_shininess = 10.0f;
+		sphere2->setMaterial((materialBase*) sampleMat);
+
+		(*d_lightList) = new lightList(d_lights, 2);
 
 		lightBase* light1 = new pointLight();
-		light1->m_location = vec3({ 0.0, 0.0, +10.0 });
+		light1->m_location = vec3({ -5.0, -5.0, +5.0 });
+		lightBase* light2 = new pointLight();
+		light2->m_location = vec3({ +5.0, -5.0, +5.0 });
+		//light2->m_baseColour = { 0.2, 0.7, 0.8 };
 		(*d_lightList)->addItem(light1);
+		(*d_lightList)->addItem(light2);
 	}
 }
 
