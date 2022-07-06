@@ -75,7 +75,7 @@ public:
 			vec3 lightDir = normalize(currLight->m_location - record.intPoint);
 
 			// Compute a start point
-			vec3 startPoint = record.intPoint + (lightDir * 0.001);
+			vec3 startPoint = record.intPoint + (lightDir * 0.001f);
 
 			// Construct a ray from the point of intersection to the light
 			ray lightRay(startPoint, startPoint + lightDir);

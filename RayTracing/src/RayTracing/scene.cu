@@ -14,7 +14,7 @@
 #define checkCudaErrors1(val) check_cuda1( (val), #val, __FILE__, __LINE__ )
 void check_cuda1(cudaError_t result, char const* const func, const char* const file, int const line) {
 	if(result) {
-		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
+		std::cerr << "CUDA error = " << static_cast<uint32_t>(result) << " at " <<
 			file << ":" << line << " '" << func << "' \n";
 		auto errName = cudaGetErrorName(result);
 		std::cerr << errName << '\n';
@@ -414,6 +414,55 @@ void free_world(camera** d_camera) {
 	}
 }
 
+__global__ 
+void find_maximum_kernel(float* array, float* max, int* mutex, unsigned int n) {
+	unsigned int index = threadIdx.x + blockIdx.x * blockDim.x;
+	unsigned int stride = gridDim.x * blockDim.x;
+	unsigned int offset = 0;
+
+	extern __shared__ float cache[256];
+
+
+	float temp = -1.0;
+	while(index + offset < n) {
+		temp = fmaxf(temp, array[index + offset]);
+
+		offset += stride;
+	}
+
+	cache[threadIdx.x] = temp;
+
+	__syncthreads();
+
+
+	// reduction
+	unsigned int i = blockDim.x / 2;
+	while(i != 0) {
+		if(threadIdx.x < i) {
+			cache[threadIdx.x] = fmaxf(cache[threadIdx.x], cache[threadIdx.x + i]);
+		}
+
+		__syncthreads();
+		i /= 2;
+	}
+
+	if(threadIdx.x == 0) {
+		while(atomicCAS(mutex, 0, 1) != 0);  //lock
+		*max = fmaxf(*max, cache[0]);
+		atomicExch(mutex, 0);  //unlock
+	}
+}
+
+// Temporary
+// kernel to get pointer to first element in image buffer
+__global__
+void get_ptr(vec3* buff, float* resPtr, size_t n) {
+	if(threadIdx.x == 0 && blockIdx.x == 0) {
+		resPtr = &(buff[0].x);
+		//printf("%.2f\n", *(resPtr + n - 1));
+	}
+}
+
 namespace fRT {
 	Scene::Scene() {
 		m_changedState = true;
@@ -536,9 +585,6 @@ namespace fRT {
 			m_worldChanged = false;
 		}
 
-		// Call create world kernel to make objects on the device
-		int worldSize = 3;
-		int lightSize = 1;
 
 		// Render the buffer
 		dim3 blocks(xSize / tx + 1, ySize / ty + 1);
@@ -547,6 +593,28 @@ namespace fRT {
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
 
+		// Finding max in m_deviceImageBuffer
+		size_t N = numPixels * 3;
+
+		float* h_max;
+		float* d_max;
+		int* d_mutex;
+
+		// allocate memory
+		h_max = (float*) malloc(sizeof(float));
+		checkCudaErrors1(cudaMalloc((void**) &d_max, sizeof(float)));
+		checkCudaErrors1(cudaMalloc((void**) &d_mutex, sizeof(int)));
+		checkCudaErrors1(cudaMemset(d_max, 0, sizeof(float)));
+		checkCudaErrors1(cudaMemset(d_mutex, 0, sizeof(float)));
+
+		dim3 gridSize = 256;
+		dim3 blockSize = 256;
+		find_maximum_kernel << <gridSize, blockSize >> > (&m_deviceImageBuffer[0].x, d_max, d_mutex, N);
+		checkCudaErrors1(cudaGetLastError());
+		checkCudaErrors1(cudaDeviceSynchronize());
+
+		checkCudaErrors1(cudaMemcpy(h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost));
+
 
 		checkCudaErrors1(cudaMemcpy(m_hostImageBuffer, m_deviceImageBuffer, frame_buffer_size, cudaMemcpyDeviceToHost));
 		//checkCudaErrors1(cudaFree(m_deviceImageBuffer));
@@ -554,29 +622,34 @@ namespace fRT {
 		//auto end_time = std::chrono::high_resolution_clock::now();
 		//std::cerr << "\nTIME TAKEN: " << " ";
 		//std::cerr << std::fixed << std::setprecision(3) << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() * 1e-3 << " s\n" << std::endl;
+
 		for(int y = 0; y < ySize; y++) {
 			for(int x = 0; x < xSize; x++) {
 				size_t pixelIdx = y * xSize + x;
 				//int pixelIdx = y * xSize * 3 + x * 3;
-				float red = m_hostImageBuffer[pixelIdx].x;
-				float green = m_hostImageBuffer[pixelIdx].y;
-				float blue = m_hostImageBuffer[pixelIdx].z;
+				float red = m_hostImageBuffer[pixelIdx].x / *h_max;
+				float green = m_hostImageBuffer[pixelIdx].y / *h_max;
+				float blue = m_hostImageBuffer[pixelIdx].z / *h_max;
 
 
 				if(red < 0.0f) red = 0.0f;
-				if(red > 1.0f) red = 1.0f;
+				if(red > 0.99f) red = 0.99f;
 				if(green < 0.0f) green = 0.0f;
-				if(green > 1.0f) green = 1.0f;
+				if(green > 0.99f) green = 0.99f;
 				if(blue < 0.0f) blue = 0.0f;
-				if(blue > 1.0f) blue = 1.0f;
+				if(blue > 0.99f) blue = 0.99f;
 
 				//red = clamp(red, 0.0, 0.99);
 				//green = clamp(green, 0.0, 0.99);
 				//blue = clamp(blue, 0.0, 0.99);
 
+				//red = red / (red + 1.0f);
+				//green = green / (green + 1.0f);
+				//blue = blue / (blue + 1.0f);
+
 				uint8_t ir = static_cast<uint8_t>((red) * 255.0f);
 				uint8_t ig = static_cast<uint8_t>((green) * 255.0f);
-				uint8_t ib = static_cast<uint8_t>((blue) * 255.0f);
+				uint8_t ib = static_cast<uint8_t>((blue) * 256.0f);
 
 				m_ImageData[pixelIdx] = (255 << 24) | (ib << 16) | (ig << 8) | (ir);
 			}
