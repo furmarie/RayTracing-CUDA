@@ -1,8 +1,6 @@
 # RayTracing-CUDA
 Ray Tracer written in C++. Uses CUDA.
 
-Hugely inspired from QuantitativeBytes's series on RayTracing: https://youtube.com/playlist?list=PL3WoIG-PLjSt54LvzY2SuBQDl-cXa11Tm
-
 ---
 ## Requirements
 
