@@ -3,6 +3,7 @@
 
 #include "../cuda_includes.h"
 #include "../primitives/objectbase.hpp"
+#include "listcontainer.hpp"
 
 class lightBase {
 public:
@@ -18,8 +19,7 @@ public:
 	__device__ virtual bool computeIllumination(
 		const hitRecord& record,
 		objectBase* currObj,
-		objectBase** objectList,
-		int listSize,
+		objectList** objList,
 		vec3& colour,
 		float& intensity
 	) const = 0;
@@ -29,5 +29,7 @@ public:
 	vec3 m_location;
 	float m_intensity;
 };
+
+using lightList = listContainer<lightBase>;
 
 #endif

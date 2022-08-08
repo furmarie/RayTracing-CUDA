@@ -4,7 +4,7 @@
 //#include "ctpl.h"
 #include "scene.cuh"
 #include "ray.hpp"
-//#include "materials/simplematerial.hpp"
+#include "materials/simplematerial.hpp"
 //#include "textures/checker.hpp"
 #include <cassert>
 #include <iostream>
@@ -14,7 +14,7 @@
 #define checkCudaErrors1(val) check_cuda1( (val), #val, __FILE__, __LINE__ )
 void check_cuda1(cudaError_t result, char const* const func, const char* const file, int const line) {
 	if(result) {
-		std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
+		std::cerr << "CUDA error = " << static_cast<uint32_t>(result) << " at " <<
 			file << ":" << line << " '" << func << "' \n";
 		auto errName = cudaGetErrorName(result);
 		std::cerr << errName << '\n';
@@ -206,8 +206,8 @@ __device__ bool castRay(const ray& r, hitRecord& record, objectList** objList) {
 __device__ vec3 pixel_colour(const int x, const int y,
 	const int xSize, const int ySize,
 	camera** cam,
-	lightBase** d_lights, int lightSize,
-	objectList** objList
+	objectList** d_objList,
+	lightList** d_lightList
 ) {
 	//return vec3({0, 1, 0});
 
@@ -229,23 +229,46 @@ __device__ vec3 pixel_colour(const int x, const int y,
 
 	// END DEBUGGING
 
-	bool validInt = castRay(cameraRay, record, objList);
+	bool validInt = castRay(cameraRay, record, d_objList);
 
 	if(validInt) {
 		//return record.localColour;
 		//printf("HIT PLANE \n");
 		vec3 colour, difColour;
 		float intensity = 0.0f;
-		bool validIllum = d_lights[0]->computeIllumination(record, record.hitObj, (*objList)->list, (*objList)->numItems, colour, intensity);
-		if(validIllum) {
-			//colour *= intensity;
-			//printf("%.2f\n", intensity);
-			difColour = colour * intensity * record.localColour;
+		//bool validIllum = ((*d_lightList)->list[0])->computeIllumination(record, record.hitObj, objList, colour, intensity);
+		//if(validIllum) {
+		//	//colour *= intensity;
+		//	//printf("%.2f\n", intensity);
+		//	difColour = colour * intensity * record.localColour;
+		//}
+		//else {
+		//	// Debugging shadows
+		//	//return vec3({0, 1, 0});
+		//}
+
+
+		if(record.hitObj->m_hasMaterial) {
+			float reflectivity = 0.0f;
+			vec3 res = record.hitObj->m_pMaterial->getColour(
+				d_objList,
+				d_lightList,
+				record,
+				cameraRay,
+				reflectivity
+			);
+			return res;
 		}
 		else {
-			// Debugging shadows
-			//return vec3({0, 1, 0});
+			// Use basic method to compute colour because no material
+			difColour = materialBase::computeDiffuseColour(
+				d_objList,
+				d_lightList,
+				record,
+				record.hitObj->m_baseColour
+			);
 		}
+
 		return difColour;
 	}
 	else {
@@ -269,7 +292,7 @@ __device__ vec3 pixel_colour(const int x, const int y,
 }
 
 __global__
-void render(vec3* buff, const int xSize, const int ySize, camera** cam, lightBase** d_lights, int lightSize, objectList** objList) {
+void render(vec3* buff, const int xSize, const int ySize, camera** cam, objectList** d_objList, lightList** d_lightList) {
 	//if(threadIdx.x == 0 && blockIdx.x == 0) {
 	//	printf("HERE render<> %f\n", (*objList)->list[1]->m_baseColour.x);
 
@@ -280,11 +303,11 @@ void render(vec3* buff, const int xSize, const int ySize, camera** cam, lightBas
 	if(x >= xSize || y >= ySize) {
 		return;
 	}
-	buff[y * xSize + x] = pixel_colour(x, y, xSize, ySize, cam, d_lights, lightSize, objList);
+	buff[y * xSize + x] = pixel_colour(x, y, xSize, ySize, cam, d_objList, d_lightList);
 }
 
 __global__
-void create_world(objectList** objList, lightBase** d_lights, objectBase** d_world) {
+void create_world(objectList** objList, lightList** d_lightList, lightBase** d_lights, objectBase** d_world, vec3 sphereCol) {
 	if(threadIdx.x == 0 && blockIdx.x == 0) {
 		objectBase* sphere1 = new sphere();
 		GTForm* sphereTform = new GTForm();
@@ -295,15 +318,15 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 		);
 
 		GTForm* planeTform = new GTForm();
-		planeTform->setTransform(
-			vec3({ 0.0, 0.0, -1.0 }),
-			vec3({ 0.0, 0.0, 0.0 }),
-			vec3({ 3.0, 3.0, 3.0 })
-		);
-
 		objectBase* plane1 = new plane();
 		plane1->m_baseColour = vec3({ 0.5, 0.5, 0.5 });
-		plane1->setTransformMatrix(planeTform);
+		plane1->setTransformMatrix(
+			new GTForm(
+				vec3({ 0.0, 0.0, -1.0 }),
+				vec3({ 0.0, 0.0, 0.0 }),
+				vec3({ 3.0, 3.0, 3.0 })
+			)
+		);
 
 		GTForm* sphereTform2 = new GTForm();
 		sphereTform2->setTransform(
@@ -319,20 +342,38 @@ void create_world(objectList** objList, lightBase** d_lights, objectBase** d_wor
 
 		(*objList) = new objectList(d_world, 5);
 
-		//(*objList)->list[0] = sphere1;
-		//(*objList)->list[1] = plane1;
-		//(*objList)->list[2] = sphere2;
 		objectBase* sphere3 = new sphere();
 		sphere3->setTransformMatrix(planeTform);
-		(*objList)->addItem(&sphere1);
-		(*objList)->addItem(&plane1);
-		(*objList)->addItem(&sphere2);
+		(*objList)->addItem(sphere2);
+		(*objList)->addItem(sphere1);
+		(*objList)->addItem(plane1);
 
-		//printf("HERE 2 %f\n", (*objList)->list[1]->m_baseColour.x);
+		// Create a sample material
+		simpleMaterial* sampleMat = new simpleMaterial();
+		sampleMat->m_baseColour = { 1.0, 0.0, 0.0 };
+		sampleMat->m_reflectivity = 0.0f;
+		sampleMat->m_shininess = 10.0f;
+		sphere2->setMaterial((materialBase*) sampleMat);
 
-		//world[0]->m_baseColour = vec3({ 0.0, 0.0, 1.0 });
-		d_lights[0] = new pointLight();
-		d_lights[0]->m_location = vec3({ 0.0, 0.0, +10.0 });
+		(*d_lightList) = new lightList(d_lights, 2);
+
+		lightBase* light1 = new pointLight();
+		light1->m_location = vec3({ -5.0, -5.0, +5.0 });
+		lightBase* light2 = new pointLight();
+		light2->m_location = vec3({ +5.0, -5.0, +5.0 });
+		//light2->m_baseColour = { 0.2, 0.7, 0.8 };
+		(*d_lightList)->addItem(light1);
+		(*d_lightList)->addItem(light2);
+	}
+}
+
+__global__
+void update_world(objectList** objList, lightList** d_lightList, objectBase** d_world, vec3 sphereCol) {
+	// TODO create better interface to change object properties
+	if(sphereCol.x > -0.5f) {
+		if((*objList)->list[0]) {
+			(*objList)->list[0]->m_baseColour = sphereCol;
+		}
 	}
 }
 
@@ -373,14 +414,62 @@ void free_world(camera** d_camera) {
 	}
 }
 
+__global__ 
+void find_maximum_kernel(float* array, float* max, int* mutex, unsigned int n) {
+	unsigned int index = threadIdx.x + blockIdx.x * blockDim.x;
+	unsigned int stride = gridDim.x * blockDim.x;
+	unsigned int offset = 0;
+
+	extern __shared__ float cache[256];
+
+
+	float temp = -1.0;
+	while(index + offset < n) {
+		temp = fmaxf(temp, array[index + offset]);
+
+		offset += stride;
+	}
+
+	cache[threadIdx.x] = temp;
+
+	__syncthreads();
+
+
+	// reduction
+	unsigned int i = blockDim.x / 2;
+	while(i != 0) {
+		if(threadIdx.x < i) {
+			cache[threadIdx.x] = fmaxf(cache[threadIdx.x], cache[threadIdx.x + i]);
+		}
+
+		__syncthreads();
+		i /= 2;
+	}
+
+	if(threadIdx.x == 0) {
+		while(atomicCAS(mutex, 0, 1) != 0);  //lock
+		*max = fmaxf(*max, cache[0]);
+		atomicExch(mutex, 0);  //unlock
+	}
+}
+
+// Temporary
+// kernel to get pointer to first element in image buffer
+__global__
+void get_ptr(vec3* buff, float* resPtr, size_t n) {
+	if(threadIdx.x == 0 && blockIdx.x == 0) {
+		resPtr = &(buff[0].x);
+		//printf("%.2f\n", *(resPtr + n - 1));
+	}
+}
+
 namespace fRT {
 	Scene::Scene() {
 		m_changedState = true;
 		m_worldChanged = true;
 		m_cameraPosition = vec3({ 0, -15, 1 });
 		m_hostImageBuffer = nullptr;
-
-
+		sphereColour.x = -1;
 	}
 
 	Scene::~Scene() {
@@ -408,15 +497,17 @@ namespace fRT {
 		checkCudaErrors1(cudaMalloc((void**) &d_camera, sizeof(camera*)));
 
 		checkCudaErrors1(cudaMalloc((void**) &d_objList, sizeof(objectList*)));
+		checkCudaErrors1(cudaMalloc((void**) &d_lightList, sizeof(lightList*)));
 		checkCudaErrors1(cudaMalloc((void**) &d_world, 6 * sizeof(objectBase*)));
 		checkCudaErrors1(cudaMalloc((void**) &d_lights, 6 * sizeof(lightBase*)));
 
 
 		// Create the world on initialisation as the objects do not change
 		// Might move later to change when updated
-		create_world << <1, 1 >> > (d_objList, d_lights, d_world);
+		create_world << <1, 1 >> > (d_objList, d_lightList, d_lights, d_world, sphereColour);
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
+		m_worldChanged = false;
 
 		// Create the camera here, update in Render if required
 		create_camera << <1, 1 >> > (d_camera, m_cameraPosition, 1, 1);
@@ -486,16 +577,43 @@ namespace fRT {
 		dTheta = 0.0f;
 		dPhi = 0.0f;
 
-		// Call create world kernel to make objects on the device
-		int worldSize = 3;
-		int lightSize = 1;
+		// Update the world if it has changed
+		if(m_worldChanged) {
+			update_world << <1, 1 >> > (d_objList, d_lightList, d_world, sphereColour);
+			checkCudaErrors1(cudaGetLastError());
+			checkCudaErrors1(cudaDeviceSynchronize());
+			m_worldChanged = false;
+		}
+
 
 		// Render the buffer
 		dim3 blocks(xSize / tx + 1, ySize / ty + 1);
 		dim3 threads(tx, ty);
-		render << <blocks, threads >> > (m_deviceImageBuffer, xSize, ySize, d_camera, d_lights, lightSize, d_objList);
+		render << <blocks, threads >> > (m_deviceImageBuffer, xSize, ySize, d_camera, d_objList, d_lightList);
 		checkCudaErrors1(cudaGetLastError());
 		checkCudaErrors1(cudaDeviceSynchronize());
+
+		// Finding max in m_deviceImageBuffer
+		size_t N = numPixels * 3;
+
+		float* h_max;
+		float* d_max;
+		int* d_mutex;
+
+		// allocate memory
+		h_max = (float*) malloc(sizeof(float));
+		checkCudaErrors1(cudaMalloc((void**) &d_max, sizeof(float)));
+		checkCudaErrors1(cudaMalloc((void**) &d_mutex, sizeof(int)));
+		checkCudaErrors1(cudaMemset(d_max, 0, sizeof(float)));
+		checkCudaErrors1(cudaMemset(d_mutex, 0, sizeof(float)));
+
+		dim3 gridSize = 256;
+		dim3 blockSize = 256;
+		find_maximum_kernel << <gridSize, blockSize >> > (&m_deviceImageBuffer[0].x, d_max, d_mutex, N);
+		checkCudaErrors1(cudaGetLastError());
+		checkCudaErrors1(cudaDeviceSynchronize());
+
+		checkCudaErrors1(cudaMemcpy(h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost));
 
 
 		checkCudaErrors1(cudaMemcpy(m_hostImageBuffer, m_deviceImageBuffer, frame_buffer_size, cudaMemcpyDeviceToHost));
@@ -504,17 +622,34 @@ namespace fRT {
 		//auto end_time = std::chrono::high_resolution_clock::now();
 		//std::cerr << "\nTIME TAKEN: " << " ";
 		//std::cerr << std::fixed << std::setprecision(3) << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count() * 1e-3 << " s\n" << std::endl;
+
 		for(int y = 0; y < ySize; y++) {
 			for(int x = 0; x < xSize; x++) {
 				size_t pixelIdx = y * xSize + x;
 				//int pixelIdx = y * xSize * 3 + x * 3;
-				float red = m_hostImageBuffer[pixelIdx].x;
-				float green = m_hostImageBuffer[pixelIdx].y;
-				float blue = m_hostImageBuffer[pixelIdx].z;
+				float red = m_hostImageBuffer[pixelIdx].x / *h_max;
+				float green = m_hostImageBuffer[pixelIdx].y / *h_max;
+				float blue = m_hostImageBuffer[pixelIdx].z / *h_max;
 
-				unsigned char ir = static_cast<unsigned char>((red) * 255.0);
-				unsigned char ig = static_cast<unsigned char>((green) * 255.0);
-				unsigned char ib = static_cast<unsigned char>((blue) * 255.0);
+
+				if(red < 0.0f) red = 0.0f;
+				if(red > 0.99f) red = 0.99f;
+				if(green < 0.0f) green = 0.0f;
+				if(green > 0.99f) green = 0.99f;
+				if(blue < 0.0f) blue = 0.0f;
+				if(blue > 0.99f) blue = 0.99f;
+
+				//red = clamp(red, 0.0, 0.99);
+				//green = clamp(green, 0.0, 0.99);
+				//blue = clamp(blue, 0.0, 0.99);
+
+				//red = red / (red + 1.0f);
+				//green = green / (green + 1.0f);
+				//blue = blue / (blue + 1.0f);
+
+				uint8_t ir = static_cast<uint8_t>((red) * 255.0f);
+				uint8_t ig = static_cast<uint8_t>((green) * 255.0f);
+				uint8_t ib = static_cast<uint8_t>((blue) * 256.0f);
 
 				m_ImageData[pixelIdx] = (255 << 24) | (ib << 16) | (ig << 8) | (ir);
 			}
@@ -594,5 +729,30 @@ namespace fRT {
 		return true;
 	}
 
+	bool Scene::mouseMoved(vec2 currPos, bool moveCamera) {
+		if(!moveCamera) {
+			prevMousePos = currPos;
+			return false;
+		}
+		dTheta += (currPos.x - prevMousePos.x) / 500.0f;
+		dPhi += -(currPos.y - prevMousePos.y) / 500.0f;
+		//dTheta += (currPos.x) / 500.0f;
+		//dPhi += -(currPos.y) / 500.0f;
+		//std::cerr << currPos.x << ' ' << currPos.y << std::endl;
+		prevMousePos = currPos;
+		return true;
+	}
+
+	bool Scene::handleColours(vec3& sphereCol) {
+		//sphereColour.x = sphereCol[0];
+		//sphereColour.y = sphereCol[1];
+		//sphereColour.z = sphereCol[2];
+		if(sphereColour.x == sphereCol.x && sphereColour.y == sphereCol.y && sphereColour.z == sphereCol.z) {
+			return false;
+		}
+		sphereColour = sphereCol;
+		m_worldChanged = true;
+		return true;
+	}
 };
 

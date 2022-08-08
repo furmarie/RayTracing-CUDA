@@ -6,7 +6,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-
+//#define USE_GLM
 
 #ifdef USE_GLM
 #define GLM_FORCE_CUDA

@@ -10,20 +10,30 @@ using namespace Walnut;
 
 class ExampleLayer : public Walnut::Layer {
 public:
-	virtual void OnUIRender() override {
+	virtual void OnUIRender(Application* app) override {
+		if(ImGui::IsKeyDown(ImGuiKey_Escape)) {
+			if(app) {
+				app->Close();
+				return;
+			}
+		}
 		ImGui::Begin("Settings");
 		ImGui::Text("Last render: %.3fms", m_LastRenderTime);
 		ImGui::Text("FrameRate: %.3f", 1000.0f / m_LastRenderTime);
 		if(ImGui::Button("Render")) {
 			Render();
 		}
+		ImGui::ColorPicker3("Sphere Colour", &sphereColour.x);
+
 		ImGui::End();
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
 		ImGui::Begin("Viewport");
 
-		m_ViewportWidth = ImGui::GetContentRegionAvail().x;
-		m_ViewportHeight = ImGui::GetContentRegionAvail().y;
+		ImVec2 contentRegion = ImGui::GetContentRegionAvail();
+		m_ViewportWidth = contentRegion.x;
+		m_ViewportHeight = contentRegion.y;
 
 		auto image = m_scene.GetFinalImage();
 		if(image) {
@@ -34,6 +44,19 @@ public:
 		ImGui::End();
 		ImGui::PopStyleVar();
 
+		mousePos = ImGui::GetMousePos();
+
+		if(ImGui::IsKeyPressed(ImGuiKey_M)) {
+			m_disableMouse = !m_disableMouse;
+			app->disableMouse(m_disableMouse);
+		}
+
+
+		handleColours();
+
+		handleMouse();
+
+		// TODO handle keys when window focused
 		handleKeys();
 
 		Render();
@@ -86,11 +109,27 @@ public:
 		return true;
 	}
 
+	bool handleMouse() {
+		return m_scene.mouseMoved({ mousePos.x, mousePos.y }, m_disableMouse);
+	}
+
+	bool handleColours() {
+		return m_scene.handleColours(sphereColour);
+	}
+
 private:
 	fRT::Scene m_scene;
 	uint32_t m_ViewportWidth = 0, m_ViewportHeight = 0;
-	
+
+	ImVec2 mousePos;
+
 	float m_LastRenderTime = 0.0f;
+
+	// Temporarily here
+	vec3 sphereColour;
+
+	// if mouse camera movement enabled, disableMouse is true then
+	bool m_disableMouse = false;
 };
 
 Walnut::Application* Walnut::CreateApplication(int argc, char** argv) {

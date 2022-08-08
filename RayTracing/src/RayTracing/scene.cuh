@@ -9,17 +9,17 @@
 #include "camera.hpp"
 #include "primitives/sphere.hpp"
 #include "primitives/plane.hpp"
-#include "primitives/objectlist.hpp"
+
+
 //#include "primitives/cylinder.hpp"
 //#include "primitives/cone.hpp"
 //#include "primitives/torus.hpp"
 #include "lights/pointlight.hpp"
-//#include "hitrecord.h"
+
+#include "listcontainer.hpp"
+
 
 #include "cuda_includes.h"
-
-
-
 
 namespace fRT {
 	class Scene {
@@ -61,6 +61,12 @@ namespace fRT {
 		bool keyPressedSpace();
 		bool keyPressedLCtrl();
 
+		// Handle mouse movement
+		bool mouseMoved(vec2 currPos, bool moveCamera);
+
+		// Handle colour changes
+		bool handleColours(vec3& sphereCol);
+
 		void OnResize(uint32_t width, uint32_t height);
 
 		std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
@@ -68,10 +74,13 @@ namespace fRT {
 		// Private functions
 	private:
 
-		// Private members:
+		// Private members
 	private:
 		// Camera for this scene
 		camera m_camera;
+
+		// Previous mouse position
+		vec2 prevMousePos;
 
 		// Image Buffers for device and host
 		vec3* m_deviceImageBuffer;
@@ -85,10 +94,16 @@ namespace fRT {
 		float m_cameraStep = 0.05f;
 		float m_cameraAngleStep = 0.02f;
 
+		// Testing colour change for just one sphere
+		vec3 sphereColour;
+
 		// List for objects and lights. Pointers on device
 		objectList** d_objList;
+		lightList** d_lightList;
 		objectBase** d_world;
 		lightBase** d_lights;
+
+		// Vectors for objects and lights and device
 
 		// Camera object for this scene
 		camera** d_camera;
